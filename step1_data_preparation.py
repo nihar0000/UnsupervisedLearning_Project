@@ -46,6 +46,49 @@ def load_and_prepare_data(mat_file_path, output_path):
 
     # Show a few sample images
     show_sample_images(data, labels)
+    
+    # Perform EDA
+    perform_eda(df, data, labels)
+
+def perform_eda(df, data, labels):
+    """
+    Performs basic Exploratory Data Analysis (EDA).
+    """
+    print("\n--- Performing EDA ---")
+    
+    # 1. Class Distribution
+    plt.figure(figsize=(12, 6))
+    df['label'].value_counts().sort_index().plot(kind='bar')
+    plt.title('Class Distribution (Images per Subject)')
+    plt.xlabel('Subject ID')
+    plt.ylabel('Count')
+    plt.grid(axis='y', alpha=0.5)
+    plt.savefig('plots/eda_class_distribution.png')
+    print("Class distribution plot saved to plots/eda_class_distribution.png")
+    
+    # 2. Pixel Intensity Distribution
+    plt.figure(figsize=(10, 6))
+    plt.hist(data.flatten(), bins=50, color='gray', alpha=0.7)
+    plt.title('Pixel Intensity Distribution')
+    plt.xlabel('Pixel Value')
+    plt.ylabel('Frequency')
+    plt.grid(True, alpha=0.5)
+    plt.savefig('plots/eda_pixel_distribution.png')
+    print("Pixel distribution plot saved to plots/eda_pixel_distribution.png")
+    
+    # 3. Average Face
+    mean_face = np.mean(data, axis=0).reshape(112, 92)
+    plt.figure(figsize=(6, 8))
+    plt.imshow(mean_face, cmap='gray')
+    plt.title('Average Face')
+    plt.axis('off')
+    plt.savefig('plots/eda_average_face.png')
+    print("Average face plot saved to plots/eda_average_face.png")
+    
+    # 4. Basic Statistics
+    print("\nDataset Statistics:")
+    print(df.describe())
+
 
 def show_sample_images(data, labels):
     """
