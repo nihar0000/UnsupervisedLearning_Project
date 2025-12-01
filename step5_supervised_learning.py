@@ -5,6 +5,7 @@ import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv2D, MaxPooling2D, Flatten, Dropout
 from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from sklearn.metrics import classification_report, confusion_matrix
 import seaborn as sns
 import os
@@ -65,10 +66,24 @@ def run_supervised_learning(input_path):
     model.summary()
     
     # Train
-    print("Training model...")
-    history = model.fit(X_train_cnn, y_train_cat,
-                        epochs=20,
-                        batch_size=32,
+    # Train with Data Augmentation
+    print("Training model with Data Augmentation...")
+    
+    datagen = ImageDataGenerator(
+        rotation_range=20,
+        width_shift_range=0.1,
+        height_shift_range=0.1,
+        shear_range=0.1,
+        zoom_range=0.1,
+        horizontal_flip=True,
+        fill_mode='nearest'
+    )
+    
+    # Fit the generator on data (not strictly necessary for these augmentations but good practice)
+    datagen.fit(X_train_cnn)
+    
+    history = model.fit(datagen.flow(X_train_cnn, y_train_cat, batch_size=32),
+                        epochs=30, # Increased epochs for augmentation
                         validation_data=(X_val_cnn, y_val_cat))
                         
     # Plot training history
