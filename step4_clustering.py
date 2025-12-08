@@ -17,93 +17,81 @@ def run_clustering(input_path):
     X_train = data['X_train']
     y_train = data['y_train']
     
+    # --- IMPROVEMENT 1: L2 Normalization ---
+    # This projects data onto a sphere, making cosine similarity equivalent to Euclidean distance
+    from sklearn.preprocessing import Normalizer
+    print("Applying L2 Normalization (Projecting to Unit Sphere)...")
+    transformer = Normalizer().fit(X_train)
+    X_train_norm = transformer.transform(X_train)
+    
+    # --- IMPROVEMENT 2: Use fewer dimensions ---
+    # The last 50 components might be noise. Let's try top 30.
+    X_train_clean = X_train_norm[:, :30] 
+    print(f"Using top 30 Dimensions for Clustering (Shape: {X_train_clean.shape})")
+    
     # We will cluster the training data to analyze how well it groups
     # Using the reduced data (PCA 95%)
     
-    # --- K-Means ---
-    print("Running K-Means...")
+    # --- K-Means (Improved) ---
+    print("Running Improved K-Means...")
     # Determine optimal k using Elbow Method
     inertias = []
     k_range = range(10, 31) # We know there are 20 subjects, so check around 20
     
     for k in k_range:
-        print(f"Testing k={k}...")
+        # print(f"Testing k={k}...")
         kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-        kmeans.fit(X_train)
+        kmeans.fit(X_train_clean)
         inertias.append(kmeans.inertia_)
         
     plt.figure(figsize=(10, 6))
     plt.plot(k_range, inertias, marker='o')
     plt.xlabel('Number of Clusters (k)')
     plt.ylabel('Inertia')
-    plt.title('Elbow Method for Optimal k')
+    plt.title('Elbow Method for Optimal k (Improved Data)')
     plt.grid(True)
     plt.savefig('plots/kmeans_elbow.png')
     print("K-Means elbow plot saved to plots/kmeans_elbow.png")
     
-    # Let's choose k=20 (since we know the ground truth) for detailed analysis
+    # Let's choose k=20 (since we know the ground truth)
     k_optimal = 20
     kmeans = KMeans(n_clusters=k_optimal, random_state=42, n_init=10)
-    kmeans_labels = kmeans.fit_predict(X_train)
+    kmeans_labels = kmeans.fit_predict(X_train_clean)
     
     # Calculate metrics
-    sil_score = silhouette_score(X_train, kmeans_labels)
+    sil_score = silhouette_score(X_train_clean, kmeans_labels)
     hom_score = homogeneity_score(y_train, kmeans_labels)
     print(f"K-Means (k={k_optimal}): Silhouette Score = {sil_score:.4f}, Homogeneity Score = {hom_score:.4f}")
     
     # Visualize K-Means clusters (using first 2 PCA components from the reduced data)
-    plot_clusters(X_train[:, :2], kmeans_labels, 'K-Means Clustering (k=20)', 'plots/kmeans_clusters.png')
+    plot_clusters(X_train[:, :2], kmeans_labels, 'K-Means Clustering (Normalized)', 'plots/kmeans_clusters.png')
     
     # Analyze cluster purity/composition
-    analyze_clusters(kmeans_labels, y_train, "K-Means")
+    analyze_clusters(kmeans_labels, y_train, "K-Means (Improved)")
     
-    # --- DBSCAN ---
-    print("Running DBSCAN...")
-    # DBSCAN is sensitive to eps. We can use k-distance graph to find eps, but let's try a few
-    # Since data is high dimensional (even after PCA ~100 dims), distance metric matters.
-    # We might want to use cosine distance or just euclidean.
+    
+    # --- DBSCAN (Improved) ---
+    print("\nRunning Improved DBSCAN...")
+    # Distance metric matters. With L2 norm, euclidean distance is related to cosine diff.
     
     # Heuristic: try a range of eps
     best_eps = 0.5
     best_sil = -1
     best_labels = None
     
-    # Distances in high dim can be large. 
-    # Let's estimate distances.
-    from sklearn.neighbors import NearestNeighbors
-    neigh = NearestNeighbors(n_neighbors=5)
-    nbrs = neigh.fit(X_train)
-    distances, indices = nbrs.kneighbors(X_train)
-    distances = np.sort(distances[:, 4], axis=0)
-    
-    plt.figure(figsize=(10, 6))
-    plt.plot(distances)
-    plt.title('K-distance Graph for DBSCAN')
-    plt.xlabel('Points sorted by distance')
-    plt.ylabel('5th Nearest Neighbor Distance')
-    plt.grid(True)
-    plt.savefig('plots/dbscan_kdist.png')
-    print("DBSCAN k-distance plot saved to plots/dbscan_kdist.png")
-    
-    # From the plot (visual inspection needed, but let's guess based on typical values for normalized data)
-    # If data is standardized, distances are roughly sqrt(d). 
-    # Let's try eps values around the "knee" of the curve. 
-    # We'll sweep a bit.
-    
-    for eps in np.arange(5, 25, 1): # Adjust range based on data scale
+    # Since we normalized, distances are small (0 to 1 range usually)
+    # let's scan small EPS
+    for eps in np.arange(0.1, 1.5, 0.05):
         dbscan = DBSCAN(eps=eps, min_samples=3)
-        labels = dbscan.fit_predict(X_train)
+        labels = dbscan.fit_predict(X_train_clean)
         
-        # Ignore noise (-1) for silhouette if possible, or include it
-        if len(set(labels)) > 1: # at least 2 clusters (including noise)
-             # Filter out noise for score calculation if it dominates, but here we just calculate
-             # If all noise, skip
-             if len(set(labels)) == 1 and -1 in set(labels):
-                 continue
+        if len(set(labels)) > 1:
+             # Calculate silhouette excluding noise if needed, but standard is fine
+             if len(set(labels)) == 1 and -1 in set(labels): continue
                  
-             s = silhouette_score(X_train, labels)
+             s = silhouette_score(X_train_clean, labels)
              n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-             print(f"DBSCAN eps={eps}, min_samples=3 -> Clusters: {n_clusters}, Silhouette: {s:.4f}")
+             # print(f"DBSCAN eps={eps:.2f} -> Clusters: {n_clusters}, Silhouette: {s:.4f}")
              
              if s > best_sil and n_clusters > 1:
                  best_sil = s
@@ -111,9 +99,9 @@ def run_clustering(input_path):
                  best_labels = labels
     
     if best_labels is not None:
-        print(f"Best DBSCAN: eps={best_eps}, Silhouette={best_sil:.4f}")
-        plot_clusters(X_train[:, :2], best_labels, f'DBSCAN Clustering (eps={best_eps})', 'plots/dbscan_clusters.png')
-        analyze_clusters(best_labels, y_train, "DBSCAN")
+        print(f"Best DBSCAN: eps={best_eps:.2f}, Silhouette={best_sil:.4f}")
+        plot_clusters(X_train[:, :2], best_labels, f'DBSCAN Clustering (eps={best_eps:.2f})', 'plots/dbscan_clusters.png')
+        analyze_clusters(best_labels, y_train, "DBSCAN (Improved)")
     else:
         print("DBSCAN failed to find meaningful clusters.")
 
